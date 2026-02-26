@@ -25,8 +25,7 @@ df <- full_join(
 ) |> rename(date = obstime) |>
   mutate(date = as.Date(date))
 
-# --- Add row for 1999-12-31 ---
-first_eonia <- df$eonia[which.min(df$date)]   # first available eonia
+first_eonia <- df$eonia[which.min(df$date)]
 
 df <- bind_rows(
   tibble(
