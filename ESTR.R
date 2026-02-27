@@ -8,7 +8,7 @@ install_and_load <- function(...) {
   }
 }
 
-install_and_load("dplyr", "ecb", "openxlsx", "tidyr")
+install_and_load("dplyr", "ecb", "lubridate", "openxlsx", "RQuantLib", "tidyr")
 
 setwd("~/R")
 rm(list = ls(all = TRUE))
@@ -24,6 +24,18 @@ df <- full_join(
   by = "obstime"
 ) |> rename(date = obstime) |>
   mutate(date = as.Date(date))
+
+last_date <- max(df$date, na.rm = TRUE)
+next_target_bd <- businessDayList("TARGET", as.Date(last_date), as.Date(last_date + 10))[2]
+df <- bind_rows(
+  tibble(
+    date  = as.Date(next_target_bd),
+    eonia = NA_real_,
+    estr  = NA_real_
+  ),
+  df
+) |>
+  arrange(date)
 
 first_eonia <- df$eonia[which.min(df$date)]
 
@@ -102,6 +114,10 @@ df <- df |> select(date, eonia, estr, bfestr, indexur, indexwa)
 
 wb <- createWorkbook()
 addWorksheet(wb, "Sheet1")
+df_export <- df
+df_export[is.na(df_export)] <- NA
+writeData(wb, "Sheet1", df_export, keepNA = TRUE)
+saveWorkbook(wb, "estr_index.xlsx", overwrite = TRUE)
 df_export <- df
 df_export[is.na(df_export)] <- NA
 writeData(wb, "Sheet1", df_export, keepNA = TRUE)
