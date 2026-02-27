@@ -25,49 +25,26 @@ df <- full_join(
 ) |> rename(date = obstime) |>
   mutate(date = as.Date(date))
 
-last_date <- max(df$date, na.rm = TRUE)
-next_target_bd <- businessDayList("TARGET", as.Date(last_date), as.Date(last_date + 10))[2]
-df <- bind_rows(
-  tibble(
-    date  = as.Date(next_target_bd),
-    eonia = NA_real_,
-    estr  = NA_real_
-  ),
-  df
-) |>
-  arrange(date)
-
-first_eonia <- df$eonia[which.min(df$date)]
-
 df <- bind_rows(
   tibble(
     date  = as.Date("1998-12-31"),
-    eonia = first_eonia,
+    eonia = df$eonia[which.min(df$date)],
     estr  = NA_real_
   ),
-  df
+  df,
+  tibble(
+    date  = as.Date(businessDayList("TARGET", max(df$date, na.rm = TRUE), max(df$date, na.rm = TRUE) + 10)[2]),
+    eonia = NA_real_,
+    estr  = NA_real_
+  )
 ) |>
-  arrange(date)
-
-df <- df |>
-  mutate(spread = eonia - estr)
-n_dev <- sum(abs(df$spread - 0.085) > 1e-9, na.rm = TRUE) #1e-12
-if (n_dev > 0) {
-  stop(paste("Deviation(s) detected:", n_dev))
-}
-
-df <- df |>
+  arrange(date) |>
   mutate(
     bfestr = if_else(
       !is.na(estr),
       estr,
       eonia - 0.085
-    )
-  )
-
-df <- df |>
-  arrange(date) |>
-  mutate(
+    ),
     days = as.numeric(date - lag(date)),
     indexur = if_else(date == as.Date("2019-10-01"), 100, NA_real_)
   )
@@ -93,9 +70,6 @@ if (anchor_row > 1) {
 
 df <- df |>
   complete(date = seq(min(date), max(date), by = "day")) |>
-  arrange(date)
-
-df <- df |>
   mutate(
     last_bd_index = indexur,
     last_bd_rate  = bfestr,
@@ -110,15 +84,9 @@ df <- df |>
         (as.numeric(date - last_bd_date) / 360))
     )
   ) |>
-  select(-last_bd_index, -last_bd_rate, -last_bd_date)
-
-df <- df |> select(date, eonia, estr, bfestr, indexur, indexwa)
+  select(date, eonia, estr, bfestr, indexur, indexwa)
 
 wb <- createWorkbook()
 addWorksheet(wb, "Sheet1")
 writeData(wb, "Sheet1", df, keepNA = TRUE)
-saveWorkbook(wb, "estr_index.xlsx", overwrite = TRUE)
-df_export <- df
-df_export[is.na(df_export)] <- NA
-writeData(wb, "Sheet1", df_export, keepNA = TRUE)
 saveWorkbook(wb, "estr_index.xlsx", overwrite = TRUE)
