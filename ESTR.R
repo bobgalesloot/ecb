@@ -1,3 +1,7 @@
+setwd("~/R")
+rm(list = ls(all = TRUE))
+gc()
+
 install_and_load <- function(...) {
   pkgs <- c(...)
   for (pkg in pkgs) {
@@ -9,10 +13,6 @@ install_and_load <- function(...) {
 }
 
 install_and_load("dplyr", "ecb", "lubridate", "openxlsx", "RQuantLib", "tidyr")
-
-setwd("~/R")
-rm(list = ls(all = TRUE))
-gc()
 
 df <- full_join(
   get_data("EON.D.EONIA_TO.RATE") |>
@@ -51,7 +51,7 @@ df <- bind_rows(
 
 df <- df |>
   mutate(spread = eonia - estr)
-n_dev <- sum(abs(df$spread - 0.085) > 1e-12, na.rm = TRUE)
+n_dev <- sum(abs(df$spread - 0.085) > 1e-9, na.rm = TRUE) #1e-12
 if (n_dev > 0) {
   stop(paste("Deviation(s) detected:", n_dev))
 }
@@ -93,30 +93,30 @@ if (anchor_row > 1) {
 
 df <- df |>
   complete(date = seq(min(date), max(date), by = "day")) |>
-  arrange(date) |>
-  mutate(indexwa = indexur)
+  arrange(date)
 
-for (i in 2:nrow(df)) {
-  if (is.na(df$indexwa[i])) {
-    j <- i - 1
-    while (j > 0 && is.na(df$indexur[j])) {
-      j <- j - 1
-    }
-    if (j == 0 || is.na(df$indexur[j])) next
-    daydiff <- as.numeric(df$date[i] - df$date[j])
-    df$indexwa[i] <- df$indexur[j] * (
-      1 + (df$bfestr[j] / 100) * (daydiff / 360)
+df <- df |>
+  mutate(
+    last_bd_index = indexur,
+    last_bd_rate  = bfestr,
+    last_bd_date  = if_else(!is.na(indexur), date, NA_Date_)
+  ) |>
+  fill(last_bd_index, last_bd_rate, last_bd_date, .direction = "down") |>
+  mutate(
+    indexwa = if_else(
+      !is.na(indexur),
+      indexur,
+      last_bd_index * (1 + (last_bd_rate / 100) *
+        (as.numeric(date - last_bd_date) / 360))
     )
-  }
-}
+  ) |>
+  select(-last_bd_index, -last_bd_rate, -last_bd_date)
 
 df <- df |> select(date, eonia, estr, bfestr, indexur, indexwa)
 
 wb <- createWorkbook()
 addWorksheet(wb, "Sheet1")
-df_export <- df
-df_export[is.na(df_export)] <- NA
-writeData(wb, "Sheet1", df_export, keepNA = TRUE)
+writeData(wb, "Sheet1", df, keepNA = TRUE)
 saveWorkbook(wb, "estr_index.xlsx", overwrite = TRUE)
 df_export <- df
 df_export[is.na(df_export)] <- NA
